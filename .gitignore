@@ -1,0 +1,12 @@
+# dati personali: mai su git
+token.txt
+database_id.txt
+cache.json
+settings.json
+
+# compilati (si rigenerano con ./build.sh)
+Calendario Widget.app/Contents/MacOS/
+icona
+*.iconset/
+
+.DS_Store

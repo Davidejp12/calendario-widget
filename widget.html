@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Calendario</title>
+<style>
+  :root {
+    --ink: #f3ecf2;
+    --ink-2: #c9b8c6;
+    --ink-3: #8f7a8c;
+    --line: rgba(243, 236, 242, .09);
+    /* tema: cambiati da applySettings() */
+    --tint: rgba(51, 28, 46, .55);
+    --accent: #d9a9c6;
+    --accent-ink: #2a1726;
+    --ev: color-mix(in srgb, var(--accent) 26%, transparent);
+    --ev-hover: color-mix(in srgb, var(--accent) 42%, transparent);
+    --today-bg: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--tint); height: 100%; overflow: hidden; }
+  body {
+    height: 100%;
+    font: 13px/1.35 -apple-system, "SF Pro Text", sans-serif;
+    color: var(--ink);
+    -webkit-user-select: none; user-select: none;
+    cursor: default;
+    display: grid;
+    grid-template-columns: 1fr 250px;
+    grid-template-rows: 44px 1fr;
+    gap: 0 22px;
+    padding: 0 22px 20px;
+  }
+  @media (max-width: 620px) {
+    body { grid-template-columns: 1fr; }
+    aside { display: none !important; }
+  }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+  header .src { color: var(--ink-3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav { display: flex; gap: 2px; margin-left: auto; flex-shrink: 0; }
+  .nav button {
+    background: none; border: 0; color: var(--ink-2);
+    width: 26px; height: 26px; border-radius: 7px; font-size: 15px; cursor: pointer;
+  }
+  .nav button:hover { background: var(--line); color: var(--ink); }
+  .nav .sep { width: 8px; }
+
+  /* mese */
+  .month { display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .dow, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .dow span { color: var(--ink-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; padding: 0 6px 6px; }
+  .grid { grid-auto-rows: minmax(0, 1fr); border-top: 1px solid var(--line); min-height: 0; }
+  .day { border-bottom: 1px solid var(--line); padding: 5px 5px 3px; min-height: 0; overflow: hidden; border-radius: 8px; }
+  .day:hover { background: rgba(243, 236, 242, .04); }
+  .day.out .n { color: var(--ink-3); opacity: .5; }
+  .day .n { font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; display: inline-block; min-width: 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 10px; }
+  .day.today { background: var(--today-bg); }
+  .day.today .n { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .ev {
+    display: block; font-size: 10.5px; line-height: 1.3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    padding: 1px 5px; margin-top: 2px; border-radius: 4px;
+    background: var(--ev); color: var(--ink); cursor: pointer;
+  }
+  .ev:hover { background: var(--ev-hover); }
+  .ev.past { background: rgba(243, 236, 242, .06); color: var(--ink-3); }
+  .ev time { font-variant-numeric: tabular-nums; opacity: .75; margin-right: 3px; }
+  .more { font-size: 10px; color: var(--ink-3); padding-left: 5px; }
+
+  /* prossimi */
+  aside { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); padding-left: 20px; }
+  aside h2 { color: var(--ink-3); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+  .up { list-style: none; overflow: hidden; }
+  .up li { display: grid; grid-template-columns: 44px 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .up li:hover .t { color: var(--accent); }
+  .up .d { text-align: center; }
+  .up .d b { display: block; font-size: 19px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  .up .d small { color: var(--ink-3); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .up .t { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .up .c { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .up .soon .c { color: var(--accent); }
+  .empty { color: var(--ink-3); font-size: 12px; }
+
+  /* maniglia per ridimensionare (la gestisce l'app Swift) */
+  .grip {
+    position: fixed; right: 5px; bottom: 5px; width: 12px; height: 12px; opacity: .35;
+    background:
+      linear-gradient(135deg, transparent 45%, var(--ink-2) 45%, var(--ink-2) 55%, transparent 55%),
+      linear-gradient(135deg, transparent 75%, var(--ink-2) 75%, var(--ink-2) 85%, transparent 85%);
+    pointer-events: none;
+  }
+
+  /* pannelli: nuovo evento, impostazioni */
+  .overlay {
+    position: fixed; inset: 0; display: none; place-items: center;
+    background: rgba(10, 6, 10, .45); z-index: 10;
+  }
+  .overlay.open { display: grid; }
+  .card {
+    width: min(340px, calc(100% - 32px));
+    background: #1f171e;
+    border: 1px solid var(--line); border-radius: 16px;
+    padding: 18px; box-shadow: 0 20px 50px rgba(0,0,0,.45);
+    display: grid; gap: 12px;
+  }
+  .card h3 { font-size: 14px; font-weight: 600; }
+  .field { display: grid; gap: 5px; }
+  .field > span { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  input[type=text], input[type=date], input[type=time] {
+    font: inherit; color: var(--ink); color-scheme: dark;
+    background: rgba(243, 236, 242, .07); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 9px; width: 100%; -webkit-user-select: text; user-select: text;
+  }
+  input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 0; }
+  input:disabled { opacity: .35; }
+  label.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+  input[type=checkbox], input[type=range] { accent-color: var(--accent); }
+  input[type=range] { width: 100%; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+  .actions .msg { margin-right: auto; font-size: 11.5px; color: var(--ink-3); }
+  .actions .msg.err { color: #f0a0a0; }
+  .btn {
+    font: inherit; font-size: 12.5px; border: 0; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+    background: rgba(243, 236, 242, .08); color: var(--ink);
+  }
+  .btn:hover { background: rgba(243, 236, 242, .14); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.primary:disabled { opacity: .5; cursor: default; }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch {
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .swatch.on { border-color: var(--ink); }
+  .sizes { display: flex; gap: 6px; }
+  .sizes .btn { flex: 1; }
+</style>
+</head>
+<body>
+  <header>
+    <h1 id="title"></h1>
+    <span class="src" id="src"></span>
+    <div class="nav">
+      <button id="prev" title="Mese precedente">‹</button>
+      <button id="now" title="Oggi">•</button>
+      <button id="next" title="Mese successivo">›</button>
+      <span class="sep"></span>
+      <button id="add" title="Nuovo evento">+</button>
+      <button id="gear" title="Aspetto">⚙︎</button>
+    </div>
+  </header>
+  <section class="month">
+    <div class="dow"><span>lun</span><span>mar</span><span>mer</span><span>gio</span><span>ven</span><span>sab</span><span>dom</span></div>
+    <div class="grid" id="grid"></div>
+  </section>
+  <aside>
+    <h2>Prossimi</h2>
+    <ul class="up" id="up"></ul>
+  </aside>
+  <div class="grip"></div>
+
+  <div class="overlay" id="evPanel">
+    <form class="card" id="evForm" autocomplete="off">
+      <h3>Nuovo evento</h3>
+      <label class="field"><span>Titolo</span><input type="text" id="fTitle" required placeholder="es. lezione di statistica"></label>
+      <label class="field"><span>Giorno</span><input type="date" id="fDate" required></label>
+      <label class="check"><input type="checkbox" id="fAllDay"> Tutto il giorno</label>
+      <div class="row">
+        <label class="field"><span>Inizio</span><input type="time" id="fStart" value="09:00"></label>
+        <label class="field"><span>Fine</span><input type="time" id="fEnd" value="10:00"></label>
+      </div>
+      <div class="actions">
+        <span class="msg" id="fMsg"></span>
+        <button type="button" class="btn" data-close>Annulla</button>
+        <button type="submit" class="btn primary" id="fSave">Salva</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="overlay" id="setPanel">
+    <div class="card">
+      <h3>Aspetto</h3>
+      <div class="field"><span>Colore</span><div class="swatches" id="swatches"></div></div>
+      <label class="field"><span>Trasparenza</span><input type="range" id="opacity" min="20" max="95" step="5"></label>
+      <div class="field"><span>Grandezza</span>
+        <div class="sizes">
+          <button class="btn" data-size="520,340">Piccolo</button>
+          <button class="btn" data-size="760,480">Medio</button>
+          <button class="btn" data-size="1000,640">Grande</button>
+        </div>
+      </div>
+      <div class="actions"><span class="msg">oppure trascina l'angolo in basso a destra</span><button class="btn primary" data-close>Fatto</button></div>
+    </div>
+  </div>
+
+<script>
+const MESI = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+const MESI_BREVI = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+const TEMI = {
+  prugna:  { tint: [51, 28, 46],  accent: "#d9a9c6", ink: "#2a1726" },
+  nebbia:  { tint: [44, 41, 46],  accent: "#d8cdd6", ink: "#231e23" },
+  rosa:    { tint: [64, 30, 42],  accent: "#f2a7bb", ink: "#3a1422" },
+  salvia:  { tint: [32, 44, 37],  accent: "#a9cdb3", ink: "#14261a" },
+  sabbia:  { tint: [52, 42, 31],  accent: "#e3c193", ink: "#33240f" },
+  grafite: { tint: [20, 20, 22],  accent: "#e8e8e8", ink: "#1a1a1a" },
+};
+let settings = { theme: "prugna", opacity: 55 };
+let data = { events: [] };
+let view = new Date(); view.setDate(1);
+
+const $ = id => document.getElementById(id);
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const parse = s => { const [y,m,d] = s.slice(0,10).split("-").map(Number); return new Date(y, m-1, d); };
+const hasTime = s => s && s.length > 10;
+const hhmm = s => new Date(s).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+const send = msg => window.webkit?.messageHandlers?.app?.postMessage(msg);
+const open = url => url && send({ action: "open", url });
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+function eventsOn(day) {
+  const k = iso(day);
+  return data.events
+    .filter(e => { const s = e.start.slice(0,10), end = (e.end || e.start).slice(0,10); return s <= k && k <= end; })
+    .sort((a, b) => a.start.localeCompare(b.start));
+}
+
+function renderMonth() {
+  const today = iso(new Date());
+  $("title").textContent = `${MESI[view.getMonth()]} ${view.getFullYear()}`;
+  const grid = $("grid");
+  grid.replaceChildren();
+  const offset = (view.getDay() + 6) % 7;
+  const start = new Date(view); start.setDate(1 - offset);
+  const weeks = Math.ceil((offset + new Date(view.getFullYear(), view.getMonth()+1, 0).getDate()) / 7);
+  // quanti eventi stanno in una cella dipende dalla grandezza del widget
+  const cellH = (grid.clientHeight || 300) / weeks;
+  const max = Math.max(0, Math.floor((cellH - 26) / 17));
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const cell = el("div", "day");
+    if (d.getMonth() !== view.getMonth()) cell.classList.add("out");
+    if (iso(d) === today) cell.classList.add("today");
+    cell.append(el("span", "n", d.getDate()));
+    cell.onclick = () => openForm(iso(d));
+    cell.title = "Clic per aggiungere un evento";
+    const evs = eventsOn(d);
+    const shown = evs.length > max ? Math.max(0, max - 1) : evs.length;
+    evs.slice(0, shown).forEach(e => {
+      const a = el("span", "ev" + (iso(d) < today ? " past" : ""));
+      if (hasTime(e.start) && e.start.slice(0,10) === iso(d)) a.append(el("time", null, hhmm(e.start)));
+      a.append(e.title);
+      a.title = e.title;
+      a.onclick = ev => { ev.stopPropagation(); open(e.url); };
+      cell.append(a);
+    });
+    if (evs.length > shown) cell.append(el("div", "more", `+${evs.length - shown}`));
+    grid.append(cell);
+  }
+}
+
+function renderUpcoming() {
+  const today = parse(iso(new Date()));
+  const now = new Date();
+  const up = $("up");
+  up.replaceChildren();
+  const next = data.events
+    .filter(e => hasTime(e.end || e.start) ? new Date(e.end || e.start) >= now : parse(e.end || e.start) >= today)
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .slice(0, 8);
+  if (!next.length) { up.append(el("li", "empty", "Niente in programma")); return; }
+  for (const e of next) {
+    const d = parse(e.start);
+    const days = Math.round((d - today) / 864e5);
+    const li = el("li", days <= 3 ? "soon" : "");
+    const box = el("div", "d");
+    box.append(el("b", null, d.getDate()), el("small", null, MESI_BREVI[d.getMonth()]));
+    const txt = el("div"); txt.style.minWidth = "0";
+    const t = el("div", "t", e.title); t.title = e.title;
+    let when = days <= 0 ? "oggi" : days === 1 ? "domani" : `tra ${days} giorni`;
+    if (hasTime(e.start)) when += ` · ${hhmm(e.start)}` + (hasTime(e.end) ? `–${hhmm(e.end)}` : "");
+    txt.append(t, el("div", "c", when));
+    li.append(box, txt);
+    li.onclick = () => open(e.url);
+    up.append(li);
+  }
+}
+
+function renderSource() {
+  const u = data.updated ? new Date(data.updated) : null;
+  const when = u ? u.toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+  $("src").textContent =
+    data.source === "notion" ? `Notion · ${when}` : data.source === "error" ? `offline · ${when}` : `copia locale · ${when}`;
+}
+
+function render() { renderMonth(); renderUpcoming(); renderSource(); }
+
+/* ---- aspetto ---- */
+
+function applyTheme() {
+  const t = TEMI[settings.theme] || TEMI.prugna;
+  const r = document.documentElement.style;
+  r.setProperty("--tint", `rgba(${t.tint.join(",")}, ${settings.opacity / 100})`);
+  r.setProperty("--accent", t.accent);
+  r.setProperty("--accent-ink", t.ink);
+  document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("on", s.dataset.theme === settings.theme));
+  $("opacity").value = settings.opacity;
+}
+function saveSettings() { applyTheme(); send({ action: "settings", settings }); }
+
+for (const [name, t] of Object.entries(TEMI)) {
+  const s = el("div", "swatch");
+  s.dataset.theme = name; s.title = name;
+  s.style.background = `linear-gradient(135deg, rgb(${t.tint.join(",")}) 50%, ${t.accent} 50%)`;
+  s.onclick = () => { settings.theme = name; saveSettings(); };
+  $("swatches").append(s);
+}
+$("opacity").oninput = e => { settings.opacity = +e.target.value; saveSettings(); };
+document.querySelectorAll("[data-size]").forEach(b => b.onclick = () => {
+  const [w, h] = b.dataset.size.split(",").map(Number);
+  send({ action: "size", w, h });
+});
+
+/* ---- pannelli ---- */
+
+function showPanel(id) { $(id).classList.add("open"); }
+function closePanels() { document.querySelectorAll(".overlay").forEach(o => o.classList.remove("open")); }
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = closePanels);
+document.querySelectorAll(".overlay").forEach(o => o.onclick = e => { if (e.target === o) closePanels(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closePanels(); });
+
+function openForm(date) {
+  $("fTitle").value = "";
+  $("fDate").value = date || iso(new Date());
+  $("fMsg").textContent = ""; $("fMsg").className = "msg";
+  $("fSave").disabled = false;
+  showPanel("evPanel");
+  send({ action: "focus" });
+  setTimeout(() => $("fTitle").focus(), 50);
+}
+
+$("fAllDay").onchange = e => { $("fStart").disabled = $("fEnd").disabled = e.target.checked; };
+$("fStart").onchange = () => {
+  // la fine segue l'inizio: un'ora dopo
+  const [h, m] = $("fStart").value.split(":").map(Number);
+  $("fEnd").value = `${String(Math.min(23, h + 1)).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+};
+
+// data + ora locali con fuso, es. 2026-11-14T15:00:00+01:00
+function localISO(date, time) {
+  const off = -new Date(`${date}T${time}:00`).getTimezoneOffset();
+  const a = Math.abs(off);
+  return `${date}T${time}:00${off >= 0 ? "+" : "-"}${String(Math.floor(a/60)).padStart(2,"0")}:${String(a%60).padStart(2,"0")}`;
+}
+
+$("evForm").onsubmit = e => {
+  e.preventDefault();
+  const title = $("fTitle").value.trim(), date = $("fDate").value;
+  if (!title || !date) return;
+  let start = date, end = null;
+  if (!$("fAllDay").checked) {
+    if ($("fEnd").value <= $("fStart").value) {
+      $("fMsg").textContent = "La fine deve essere dopo l'inizio"; $("fMsg").className = "msg err"; return;
+    }
+    start = localISO(date, $("fStart").value);
+    end = localISO(date, $("fEnd").value);
+  }
+  $("fSave").disabled = true;
+  $("fMsg").textContent = "Salvo…"; $("fMsg").className = "msg";
+  send({ action: "create", title, start, end });
+};
+
+// risposta dell'app dopo il salvataggio su Notion
+window.onSaved = (ok, message) => {
+  $("fMsg").textContent = message;
+  $("fMsg").className = ok ? "msg" : "msg err";
+  $("fSave").disabled = false;
+  if (ok) setTimeout(closePanels, 600);
+};
+
+/* ---- avvio ---- */
+
+// chiamate dall'app Swift
+window.setData = d => { data = d; render(); };
+window.applySettings = s => { settings = { ...settings, ...s }; applyTheme(); };
+
+$("prev").onclick = () => { view.setMonth(view.getMonth() - 1); renderMonth(); };
+$("next").onclick = () => { view.setMonth(view.getMonth() + 1); renderMonth(); };
+$("now").onclick = () => { view = new Date(); view.setDate(1); renderMonth(); };
+$("add").onclick = () => openForm();
+$("gear").onclick = () => showPanel("setPanel");
+
+let resizeTimer;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderMonth, 60); });
+setInterval(render, 60 * 1000);
+applyTheme();
+render();
+</script>
+</body>
+</html>
